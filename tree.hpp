@@ -16,8 +16,28 @@ class Node
 	    MyVector<Book*> books;      // List of books stored in this Node
 	    unsigned int bookCount;     // Count of books in this Node (Category) and its all subcategories
 	    Node* parent;               // Pointer to the parent Node (nullptr for the root)
-	Public:
-	 //Decleare required methods for Book class
+	public:
+	 	Node(string name, Node* parent);
+		string getName() const;
+		Node* getParent() const;
+		unsigned int getBookCount() const;
+		MyVector<Node*>& getChildren();
+		MyVector<Book*>& getBooks();
+
+		Node* findChildByName(const string& childName);
+		Node* addChild(const string& childName);
+		bool removeChildByName(const string& childName);
+
+		bool addBook(Book* book);
+		bool removeBookByTitle(const string& title);
+		Book* findBookHereByTitle(const string& title) const;
+
+		void print(int depth) const;
+		void collectBooksInSubtree(MyVector<Book*>& out) const;
+		
+		~Node();
+
+
 };
 
 //==========================================================
@@ -28,7 +48,26 @@ class Tree
 	    Node* root;  // Pointer to the root Node of the Tree
 
 	public:
- 	//Declare the required methods for Tree class
+		Tree(const string& rootName);
+		~Tree();
+		Node* getRoot() const;
+
+		void splitPath(const string& path, MyVector<string>& parts) const;
+		Node* getNode(const string& path) const;
+		Node* createNode(const string& path);
+
+		bool removeNode(const string& path);
+		void print() const;
+
+		Book* findBook(const string& title) const;
+		bool addBookAt(const string& categoryPath, Book* book);
+		bool removeBookByTitle(const string& title);
+		
+		void findKeyword(const string& keyword) const;
+		void listAllBooksIn(const string& categoryPath) const;
+
+		
+
 
 };
 //==========================================================
