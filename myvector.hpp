@@ -157,6 +157,64 @@ const T& MyVector<T>::at(int index) const {
 	return array[index];
 }
 
+
+
+
+template <typename T>
+void MyVector<T>::push_back(const T& value){
+	if (v_size == v_capacity){
+		reserve(v_capacity * 2);
+	}
+	array[v_size] = value;
+	v_size++;
+}
+
+template <typename T>
+void MyVector<T>::insertAt(int index, const T& value) {
+	if (index < 0 || index > v_size){
+		throw out_of_range("Index is out of range");
+	}
+	if (v_size == v_capacity){
+		reserve(v_capacity * 2);
+	}
+	for (int i = v_size - 1; i >= index; i--){
+		array[i+1] = array[i];
+	}
+	array[index] = value;
+	v_size++;
+}
+
+
+template <typename T>
+void MyVector<T>::removeAt(int index){
+	if (index < 0 || index >= v_size){
+		throw out_of_range("Index is out of range");
+	}
+	for (int i = index; i < v_size - 1; i++){
+		array[i] = array[i+1];
+	}
+	v_size--;	
+}
+
+
+template <typename T>
+void MyVector<T>::pop_back(){
+	if (v_size == 0){
+		throw out_of_range("Vector is empty");
+	}
+	v_size--;
+}
+
+
+template <typename T>
+int MyVector<T>::indexOf(const T& value) const {
+	for (int i = 0; i < v_size; i++) {
+		if (array[i] == value) return i;
+	}
+	return -1;
+}
+
+
 //==========================================================
 // Do not write any code below this line
 #endif
