@@ -97,7 +97,65 @@ int MyVector<T>::size() const{
 	return v_size;
 }
 
+template <typename T>
+int MyVector<T>::capacity() const{
+	return v_capacity;
+}
 
+
+template <typename T>
+bool MyVector<T>::empty() const{
+	return v_size == 0;
+}
+
+
+
+template <typename T>
+void MyVector<T>::clear() {
+	v_size = 0;
+}
+
+
+template <typename T>
+void MyVector<T>::reserve(int newCapacity) {
+	if (newCapacity <= v_capacity) return;
+	if (newCapacity > v_capacity){
+		T* new_array = new T[newCapacity];
+		for (int i = 0; i < v_size; i++){
+			new_array = array[i];
+		}
+		delete [] array;
+		array = new_array;
+		v_capacity = newCapacity;
+	}
+}
+
+
+template <typename T>
+T& MyVector<T>::operator[](int index){
+	return array[index];
+}
+
+template <typename T>
+const T& MyVector<T>::operator[](int index) const {
+    return array[index];
+}
+
+template <typename T>
+T& MyVector<T>::at(int index) {
+	if (index < 0 || index >= v_size){
+		throw out_of_range("Index out of range");
+	}
+	return array[index];
+}
+
+template <typename T>
+const T& MyVector<T>::at(int index) const {
+	if (index < 0 || index >= v_size){
+		throw out_of_range("Index out of range");
+	}
+	return array[index];
+}
 
 //==========================================================
 // Do not write any code below this line
