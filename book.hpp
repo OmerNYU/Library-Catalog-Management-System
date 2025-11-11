@@ -136,7 +136,7 @@ void Book::printBook() const {
 // - Adds surrounding quotes
 // - Doubles any internal quotes to preserve CSV correctness
 // - Makes fields with commas/quotes safe for re-import
-string quoteCSV(const string& field) {
+inline string quoteCSV(const string& field) {
     string safe = field;
     // Walk string and escape embedded quotes by doubling them
     size_t pos = 0;

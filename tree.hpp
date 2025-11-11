@@ -8,8 +8,8 @@
 // recursively in ~Node(), so deleting Tree::root frees the entire structure.
 
 #include <string>
-// NOTE: print() uses std::cout; ensure <iostream> is included in the
-// translation unit that includes this header (or add it here if preferred).
+// Bring in stream facilities locally so every translation unit compiles cleanly
+#include <iostream>
 #include "myvector.hpp"
 #include "book.hpp"
 
@@ -40,8 +40,14 @@ class Node
 		unsigned int getBookCount() const;
 		// Mutable access to children vector (used by Tree internals)
 		MyVector<Node*>& getChildren();
+		// Const-qualified access for read-only traversals inside const contexts
+		const MyVector<Node*>& getChildren() const;
 		// Mutable access to books vector (used by Node internals)
 		MyVector<Book*>& getBooks();
+		// Const-qualified access for read-only traversals inside const contexts
+		const MyVector<Book*>& getBooks() const;
+		// Allow external callers (LCMS) to rename a category node when validated
+		void setName(const string& newName);
 
 		// Search immediate children by name; nullptr if not found
 		Node* findChildByName(const string& childName) const;
@@ -75,6 +81,8 @@ class Tree
 	private:
 	    // Root category node owned by the Tree
 	    Node* root;  // Pointer to the root Node of the Tree
+	    // Helper used by print() to render the tree with ASCII connectors
+	    void printNode(const Node* node, const string& prefix, bool isLast) const;
 
 	public:
 		// Construct a tree with a named root category
@@ -107,6 +115,8 @@ class Tree
 		void findKeyword(const string& keyword) const;
 		// List all books under a category path (or entire tree if empty path)
 		void listAllBooksIn(const string& categoryPath) const;
+		// Enable external callers to remove a specific child from a parent node
+		bool removeChild(Node* parentNode, const string& childName);
 
 		
 
@@ -141,9 +151,24 @@ MyVector<Node*>& Node::getChildren() {
     return children;
 }
 
+// Provide const access to child list so traversal helpers remain const-correct
+const MyVector<Node*>& Node::getChildren() const {
+    return children;
+}
+
 // Provide mutable access to books for node-level ops
 MyVector<Book*>& Node::getBooks() {
     return books;
+}
+
+// Provide const access to book list so read-only operations preserve immutability
+const MyVector<Book*>& Node::getBooks() const {
+    return books;
+}
+
+// Update the stored category name after validation in higher-level logic
+void Node::setName(const string& newName) {
+	name = newName;
 }
 
 // Linear search over immediate children for a matching name
@@ -418,7 +443,35 @@ bool Tree::removeNode(const string& path) {
 
 // Print the full tree
 void Tree::print() const {
-    if (root) root->print(0);
+    if (!root) return;
+    // Print the root line first using the aggregate book count
+    cout << root->getName() << "(" << root->getBookCount() << ")\n";
+    // Fetch children using the const accessor to preserve immutability guarantees
+    const MyVector<Node*>& kids = root->getChildren();
+    // Render each child with appropriate branch markers
+    for (int i = 0; i < kids.size(); ++i) {
+        bool isLast = (i == kids.size() - 1);
+        printNode(kids[i], "", isLast);
+    }
+}
+
+// Recursively render a subtree using ASCII branches similar to the professor's sample
+void Tree::printNode(const Node* node, const string& prefix, bool isLast) const {
+    // Print the accumulated prefix (vertical bars and spaces)
+    cout << prefix;
+    // Choose connector: "`-- " for the final child, "|-- " otherwise
+    cout << (isLast ? "\\-- " : "|-- ");
+    // Display the node name followed by the total book count held in the subtree
+    cout << node->getName() << "(" << node->getBookCount() << ")\n";
+    // Build the prefix for children: add spaces when last, vertical bar otherwise
+    string nextPrefix = prefix + (isLast ? "    " : "|   ");
+    // Access children via const overload to avoid accidental mutation
+    const MyVector<Node*>& kids = node->getChildren();
+    // Iterate through children and render them with updated prefix context
+    for (int i = 0; i < kids.size(); ++i) {
+        bool childIsLast = (i == kids.size() - 1);
+        printNode(kids[i], nextPrefix, childIsLast);
+    }
 }
 
 // =============================
@@ -558,6 +611,14 @@ void Tree::listAllBooksIn(const string& categoryPath) const {
 }
 
 
+
+// Provide a small wrapper so LCMS can remove a child via the Tree abstraction
+bool Tree::removeChild(Node* parentNode, const string& childName) {
+    if (!parentNode) {
+        return false;
+    }
+    return parentNode->removeChildByName(childName);
+}
 
 //==========================================================
 // Do not write any code below this line

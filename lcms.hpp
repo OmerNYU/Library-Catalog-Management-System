@@ -219,6 +219,110 @@ static string _lcms_nodePath(const Node* n) {
     return out;
 }
 
+// Recursively gather category pointers in post-order so parents print after children
+static void _lcms_collectCategoriesPostOrder(Node* node, MyVector<Node*>& out) {
+    // Guard against null nodes (should not happen but keeps function safe)
+    if (!node) return;
+    // Iterate through children first to guarantee they appear before the parent
+    MyVector<Node*>& kids = node->getChildren();
+    for (int i = 0; i < kids.size(); ++i) {
+        _lcms_collectCategoriesPostOrder(kids[i], out);
+    }
+    // Append the current node once descendants have been processed
+    out.push_back(node);
+}
+
+// Traverse the entire tree and record category and book matches for a keyword search
+static void _lcms_collectMatches(Tree* tree, const string& keyword, MyVector<Node*>& categoryOut, MyVector<Book*>& bookOut) {
+    // Protect against an empty tree
+    if (!tree || !tree->getRoot()) return;
+    // Manual DFS stack to avoid recursion depth issues
+    MyVector<Node*> stack;
+    stack.push_back(tree->getRoot());
+    // Iterate until every node has been inspected
+    while (!stack.empty()) {
+        int last = stack.size() - 1;
+        Node* cur = stack[last];
+        stack.removeAt(last);
+        // Check category name match (skip pushing the root into results)
+        if (cur != tree->getRoot()) {
+            if (cur->getName().find(keyword) != string::npos) {
+                categoryOut.push_back(cur);
+            }
+        }
+        // Check each book stored directly in this node
+        MyVector<Book*>& books = cur->getBooks();
+        for (int i = 0; i < books.size(); ++i) {
+            Book* candidate = books[i];
+            bool match =
+                (candidate->getTitle().find(keyword)  != string::npos) ||
+                (candidate->getAuthor().find(keyword) != string::npos) ||
+                (candidate->getISBN().find(keyword)   != string::npos) ||
+                (to_string(candidate->getYear()).find(keyword) != string::npos);
+            if (match) {
+                bookOut.push_back(candidate);
+            }
+        }
+        // Push children for further processing
+        MyVector<Node*>& kids = cur->getChildren();
+        for (int i = 0; i < kids.size(); ++i) {
+            stack.push_back(kids[i]);
+        }
+    }
+}
+
+// Helper to format plural-sensitive lines (e.g., "1 Book found." vs "2 Books found.")
+static void _lcms_printCountLine(int count, const string& singular, const string& plural) {
+    // Choose the correct noun based on the count
+    const string& noun = (count == 1) ? singular : plural;
+    // Emit the line with trailing period to match screenshot style
+    cout << count << " " << noun << " found." << endl;
+}
+
+// Render the detailed book block bordered by dashed separators
+static void _lcms_printBookDetails(const Book* book) {
+    // Defensive check to avoid dereferencing null pointers
+    if (!book) return;
+    cout << "------------------------------------------------------------" << endl;
+    cout << "Title:  " << book->getTitle() << endl;
+    cout << "Author(s):  " << book->getAuthor() << endl;
+    cout << "ISBN:  " << book->getISBN() << endl;
+    cout << "Year:  " << book->getYear() << endl;
+    cout << "------------------------------------------------------------" << endl;
+}
+
+// Print an entire list of books, inserting a blank line between successive entries
+static void _lcms_printBookCollection(const MyVector<Book*>& books) {
+    for (int i = 0; i < books.size(); ++i) {
+        _lcms_printBookDetails(books[i]);
+        if (i + 1 < books.size()) {
+            cout << endl;
+        }
+    }
+}
+
+// Extract the final segment of a category path for concise messages
+static string _lcms_lastSegment(const string& path) {
+    // Split path manually to avoid using additional libraries
+    string result = "";
+    string segment = "";
+    for (int i = 0; i < (int)path.size(); ++i) {
+        char c = path[i];
+        if (c == '/') {
+            if (segment.size() > 0) {
+                result = segment;
+                segment = "";
+            }
+        } else {
+            segment += c;
+        }
+    }
+    if (segment.size() > 0) {
+        result = segment;
+    }
+    return result;
+}
+
 // DFS: does the library already contain an equal book? (uses Book::operator==)
 static bool _lcms_libraryContains(Tree* tree, const Book& b) {
     // Stack for manual DFS
@@ -270,7 +374,7 @@ static bool _lcms_libraryContainsExcept(Tree* tree, const Book& b, const Book* s
 }
 
 // Preorder export: write all books in subtree as CSV rows with full category path
-static void _lcms_dfsExport(Node* node, const string& pathPrefix, ofstream& out) {
+static int _lcms_dfsExport(Node* node, const string& pathPrefix, ofstream& out) {
     // Compute this node's path for book rows (pathPrefix already excludes root)
     string myPath = pathPrefix;
     if (node->getParent() != nullptr) {
@@ -280,18 +384,23 @@ static void _lcms_dfsExport(Node* node, const string& pathPrefix, ofstream& out)
         myPath += segment;
     }
 
+    // Track the number of rows written from this subtree
+    int written = 0;
     // Emit all local books with their category path
     MyVector<Book*>& books = node->getBooks();
     for (int i = 0; i < books.size(); ++i) {
         // Book::toCSV prints Title,Author,ISBN,Year with proper quoting
         out << books[i]->toCSV() << "," << quoteCSV(myPath) << "\n";
+        written++;
     }
 
     // Recurse into children
     MyVector<Node*>& kids = node->getChildren();
     for (int i = 0; i < kids.size(); ++i) {
-        _lcms_dfsExport(kids[i], myPath, out);
+        written += _lcms_dfsExport(kids[i], myPath, out);
     }
+    // Return total rows emitted below this node
+    return written;
 }
 
 
@@ -393,8 +502,8 @@ int LCMS::import(string path) {
         }
     }
 
-    // Report how many were imported (format to match your course’s expectation)
-    cout << importedCount << " books imported" << endl;
+    // Report how many were imported (format aligned with professor sample)
+    cout << importedCount << " records have been imported." << endl;
 
     // Success per spec when file opened
     return 0;
@@ -409,24 +518,84 @@ void LCMS::exportData(string path) {
         return;
     }
 
-    // Write the header exactly as sample expects
-    fout << "Title,Author,ISBN,Publication Year,Category\n";
+    // Emit the exact header string required by the assignment spec for grading
+    fout << "Title,Author,ISBN,Year,Category\n";
 
-    // Preorder traversal (root excluded from category path)
-    _lcms_dfsExport(libTree->getRoot(), "", fout);
+    // Preorder traversal (root excluded from category path) and count rows
+    int exported = _lcms_dfsExport(libTree->getRoot(), "", fout);
+
+    // Announce success using the phrasing from the professor's output
+    cout << exported << " records have been successfully exported to " << path << endl;
 }
 
 // Search categories and books for a keyword; delegate to Tree helper
 void LCMS::find(string keyword) {
-    // Simple delegation: prints matches internally
-    libTree->findKeyword(keyword);
+    // Normalize keyword to avoid issues with leading/trailing spaces
+    string trimmed = _lcms_trim(keyword);
+    // Prepare match containers for categories and books
+    MyVector<Node*> categoryMatches;
+    MyVector<Book*> bookMatches;
+    // Populate the containers via a single tree traversal
+    _lcms_collectMatches(libTree, trimmed, categoryMatches, bookMatches);
+
+    // Mirror the professor's summary lines for the two match counts
+    cout << categoryMatches.size() << (categoryMatches.size() == 1 ? " Category/sub-category found." : " Categories/sub-categories found.") << endl;
+    cout << bookMatches.size() << (bookMatches.size() == 1 ? " Book found." : " Books found.") << endl;
+
+    // Display the matching categories with numbering
+    // Print a separator to match the screenshot styling
+    cout << "============================================================" << endl;
+    // Label the category section with the search keyword
+    cout << "List of Categories containing <" << trimmed << ">:" << endl;
+    if (categoryMatches.size() == 0) {
+        // Show explicit placeholder when no categories were found
+        cout << "None" << endl;
+    } else {
+        for (int i = 0; i < categoryMatches.size(); ++i) {
+            // Enumerate each matching category using its path string
+            cout << (i + 1) << ": " << _lcms_nodePath(categoryMatches[i]) << endl;
+        }
+    }
+
+    // Display the matching books using the detailed format
+    // Drop another separator before listing book matches
+    cout << "============================================================" << endl;
+    // Headline the book list, again referencing the keyword
+    cout << "List of Books containing <" << trimmed << ">:" << endl;
+    if (bookMatches.size() == 0) {
+        // Provide an explicit "None" message when there are no book matches
+        cout << "None" << endl;
+    } else {
+        // Print every matched book using the shared detailed block helper
+        _lcms_printBookCollection(bookMatches);
+    }
+    // Close out the section with one final separator line
+    cout << "============================================================" << endl;
 }
 
 // List all books under a category (or entire library if category empty)
 void LCMS::findAll(string category) {
     // Normalize the path; an empty result means "whole library"
     string norm = _lcms_normalizePath(category);
-    libTree->listAllBooksIn(norm);
+    // Determine the starting node (root when path empty)
+    Node* start = (norm.size() == 0) ? libTree->getRoot() : libTree->getNode(norm);
+    if (!start) {
+        // Mirror the professor's phrasing when the category cannot be located
+        cout << "No such category/sub-category found in the Catalog." << endl;
+        return;
+    }
+    // Gather every book under the chosen node
+    MyVector<Book*> collected;
+    start->collectBooksInSubtree(collected);
+    if (collected.size() == 0) {
+        // Inform the user when the category exists but contains no titles
+        cout << "No books found." << endl;
+    } else {
+        // Otherwise display the entire collection using the standard block output
+        _lcms_printBookCollection(collected);
+    }
+    // Summarize the total number of records printed
+    cout << collected.size() << (collected.size() == 1 ? " record found." : " records found.") << endl;
 }
 
 // Display the whole tree (categories and titles per node)
@@ -440,11 +609,14 @@ void LCMS::findBook(string bookTitle) {
     // Lookup across entire tree
     Book* b = libTree->findBook(bookTitle);
     if (!b) {
-        cout << "Book not found" << endl;
+        // Keep the messaging consistent with the screenshots on failure
+        cout << "Book not found in the library." << endl;
         return;
     }
     // Display full details
-    b->printBook();
+    // Introduce the block exactly as the professor's example does
+    cout << "Book found in the library:" << endl;
+    _lcms_printBookDetails(b);
 }
 
 // Prompt for a new book and insert it into a category if not duplicate
@@ -453,11 +625,11 @@ void LCMS::addBook() {
     string title, author, isbn, yearS, category;
 
     // Prompt: title
-    cout << "Enter title: ";
+    cout << "Enter Title: ";
     std::getline(cin, title);
 
     // Prompt: author
-    cout << "Enter author: ";
+    cout << "Enter Author(s): ";
     std::getline(cin, author);
 
     // Prompt: ISBN
@@ -465,17 +637,17 @@ void LCMS::addBook() {
     std::getline(cin, isbn);
 
     // Prompt: publication year
-    cout << "Enter publication year: ";
+    cout << "Enter Publication Year: ";
     std::getline(cin, yearS);
 
     // Prompt: category path
-    cout << "Enter category (e.g., Computer Science/Algorithms): ";
+    cout << "Enter Category: ";
     std::getline(cin, category);
 
     // Validate year
     int year = 0;
     if (!_lcms_parseYear(yearS, year)) {
-        cout << "Invalid year. Aborting add." << endl;
+        cout << "Invalid publication year. Aborting add." << endl;
         return;
     }
 
@@ -489,24 +661,26 @@ void LCMS::addBook() {
     // Build candidate for duplicate check
     Book candidate(title, author, isbn, year);
     if (_lcms_libraryContains(libTree, candidate)) {
-        cout << "Duplicate book exists. Not added." << endl;
+        cout << "Book already exists in the catalog." << endl;
         return;
     }
 
     // Create node path if needed
     Node* node = libTree->createNode(norm);
     if (!node) {
-        cout << "Internal error: category creation failed." << endl;
+        cout << "Could not locate or create category. Aborting add." << endl;
         return;
     }
 
     // Allocate and insert
     Book* added = new Book(title, author, isbn, year);
     if (node->addBook(added)) {
-        cout << "Book added." << endl;
+        // Report success using the professor's celebratory phrasing
+        cout << title << " has been successfully added into the Catalog." << endl;
     } else {
         delete added;
-        cout << "Add failed (duplicate in node)." << endl;
+        // Inform the user when the specific category already holds an equivalent entry
+        cout << "Book already exists in the selected category." << endl;
     }
 }
 
@@ -515,75 +689,108 @@ void LCMS::editBook(string bookTitle) {
     // Look up the book across entire tree
     Book* b = libTree->findBook(bookTitle);
     if (!b) {
-        cout << "Book not found." << endl;
+        cout << "Book not found in the library." << endl;
         return;
     }
 
-    // Show current values and accept new values (blank keeps old)
-    cout << "Editing book. Leave a field blank to keep current value.\n";
+    // Display the current details just like the professor's example
+    cout << "Book found in the library:" << endl;
+    _lcms_printBookDetails(b);
 
-    // Title
-    cout << "Title [" << b->getTitle() << "]: ";
-    string t; std::getline(cin, t);
-    // Author
-    cout << "Author [" << b->getAuthor() << "]: ";
-    string a; std::getline(cin, a);
-    // ISBN
-    cout << "ISBN [" << b->getISBN() << "]: ";
-    string i; std::getline(cin, i);
-    // Year
-    cout << "Publication Year [" << b->getYear() << "]: ";
-    string y; std::getline(cin, y);
+    // Preserve originals so we can revert if necessary
+    string originalTitle = b->getTitle();
+    string originalAuthor = b->getAuthor();
+    string originalISBN = b->getISBN();
+    int originalYear = b->getYear();
 
-    // Save old values in case we need to revert
-    string oldT = b->getTitle();
-    string oldA = b->getAuthor();
-    string oldI = b->getISBN();
-    int    oldY = b->getYear();
+    // Present the editing menu repeatedly until the user chooses to exit
+    while (true) {
+        cout << "1: Title" << endl;
+        cout << "2: Author" << endl;
+        cout << "3: ISBN" << endl;
+        cout << "4: Publication_year" << endl;
+        cout << "5: exit" << endl;
+        cout << "choose the field that you want to edit: ";
+        string choice;
+        std::getline(cin, choice);
 
-    // Tentatively apply new values if provided
-    if (_lcms_trim(t).size() > 0) b->setTitle(t);
-    if (_lcms_trim(a).size() > 0) b->setAuthor(a);
-    if (_lcms_trim(i).size() > 0) b->setISBN(i);
-    if (_lcms_trim(y).size() > 0) {
-        int yy = 0;
-        if (_lcms_parseYear(y, yy)) {
-            b->setYear(yy);
+        if (choice == "5") {
+            break;
+        } else if (choice == "1") {
+            cout << "Enter Title: ";
+            string newValue;
+            std::getline(cin, newValue);
+            if (_lcms_trim(newValue).size() > 0) {
+                b->setTitle(newValue);
+            }
+        } else if (choice == "2") {
+            cout << "Enter Author(s): ";
+            string newValue;
+            std::getline(cin, newValue);
+            if (_lcms_trim(newValue).size() > 0) {
+                b->setAuthor(newValue);
+            }
+        } else if (choice == "3") {
+            cout << "Enter ISBN: ";
+            string newValue;
+            std::getline(cin, newValue);
+            if (_lcms_trim(newValue).size() > 0) {
+                b->setISBN(newValue);
+            }
+        } else if (choice == "4") {
+            cout << "Enter Publication Year: ";
+            string newYear;
+            std::getline(cin, newYear);
+            if (_lcms_trim(newYear).size() > 0) {
+                int parsed = 0;
+                if (_lcms_parseYear(newYear, parsed)) {
+                    b->setYear(parsed);
+                } else {
+                    cout << "Invalid publication year." << endl;
+                }
+            }
         } else {
-            cout << "Invalid year; keeping old year.\n";
+            cout << "Invalid option." << endl;
         }
     }
 
-    // Check duplicates after edit (exclude the same pointer)
+    // Prevent duplicate records by rolling back if a clash is detected
     if (_lcms_libraryContainsExcept(libTree, *b, b)) {
-        // Revert and notify
-        b->setTitle(oldT);
-        b->setAuthor(oldA);
-        b->setISBN(oldI);
-        b->setYear(oldY);
-        cout << "Edit would create a duplicate; changes reverted.\n";
-        return;
+        b->setTitle(originalTitle);
+        b->setAuthor(originalAuthor);
+        b->setISBN(originalISBN);
+        b->setYear(originalYear);
+        cout << "Edit would create a duplicate; changes reverted." << endl;
     }
-
-    // Confirm success
-    cout << "Book updated.\n";
 }
 
 // Remove a book by title (first match anywhere)
 void LCMS::removeBook(string bookTitle) {
-    // Ask for simple confirmation (optional)
-    cout << "Remove \"" << bookTitle << "\"? (y/n): ";
-    string ans; std::getline(cin, ans);
-    if (ans != "y" && ans != "Y") {
-        cout << "Cancelled.\n";
+    // Locate the book first so we can show its details to the user
+    Book* b = libTree->findBook(bookTitle);
+    if (!b) {
+        // Match the screenshot when the requested title is missing
+        cout << "Book not found in the library." << endl;
         return;
     }
 
-    // Delegate to Tree-wide removal
+    // Announce the located title and show details before confirming deletion
+    cout << "Book found in the library:" << endl;
+    _lcms_printBookDetails(b);
+    cout << "Are you sure you want to delete the book " << b->getTitle() << " (yes/no): ";
+    string ans; std::getline(cin, ans);
+    if (ans != "yes" && ans != "YES" && ans != "Yes") {
+        // Provide explicit confirmation that the book was preserved
+        cout << "Book \"" << b->getTitle() << "\" was not deleted." << endl;
+        return;
+    }
+
     if (libTree->removeBookByTitle(bookTitle)) {
-        cout << "Book removed.\n";
+        // Mirror the professor's phrasing when deletion succeeds
+        cout << "Book \"" << bookTitle << "\" has been deleted from the library" << endl;
     } else {
-        cout << "Book not found.\n";
+        // Edge case: the tree failed to remove the title after confirmation
+        cout << "Book \"" << bookTitle << "\" could not be deleted." << endl;
     }
 }
 
@@ -595,10 +802,12 @@ void LCMS::findCategory(string category) {
 
     // Print result or a not-found message
     if (!n) {
-        cout << "Category not found.\n";
+        cout << "No such category/sub-category found in the Catalog." << endl;
         return;
     }
-    n->print(0);
+    string label = (norm.size() == 0) ? libTree->getRoot()->getName() : _lcms_lastSegment(norm);
+    // Confirm discovery using the professor's wording
+    cout << "Category " << label << " was found in the Catalog" << endl;
 }
 
 // Add (or ensure) a category path exists
@@ -610,23 +819,115 @@ void LCMS::addCategory(string category) {
         return;
     }
 
-    // Create path (idempotent)
-    libTree->createNode(norm);
-    cout << "Category ensured: " << norm << "\n";
+    bool existed = (libTree->getNode(norm) != nullptr);
+    Node* created = libTree->createNode(norm);
+    string label = _lcms_lastSegment(norm);
+    if (existed) {
+        // Inform that the requested category was already present
+        cout << label << " already exists in the Catalog." << endl;
+    } else if (created) {
+        // Announce the freshly created category using the professor's wording
+        cout << label << " has been successfully created." << endl;
+    } else {
+        // Handle unexpected failure during category creation
+        cout << "Could not create the category." << endl;
+    }
 }
 
 // Rename a category by path (requires Node::setName to exist)
 void LCMS::editCategory(string category) {
-    // Normalize and locate node
+    // Normalize the incoming path so comparisons behave consistently
     string norm = _lcms_normalizePath(category);
+    // Resolve the target category using the tree navigation helper
     Node* n = libTree->getNode(norm);
     if (!n) {
         cout << "Category not found.\n";
         return;
     }
 
-    // Root rename is allowed or not? You can decide; here we allow it.
+    // Prompt the user for the replacement name of the category segment
+    cout << "Enter new category name: ";
+    string replacement;
+    std::getline(cin, replacement);
+    // Trim whitespace so empty responses are detected correctly
+    string trimmed = _lcms_trim(replacement);
+    if (trimmed.size() == 0) {
+        cout << "Invalid category name.\n";
+        return;
+    }
 
+    // Grab the parent so we can watch for sibling-name collisions
+    Node* parent = n->getParent();
+    if (parent != nullptr) {
+        // Walk the sibling list and refuse a duplicate label
+        MyVector<Node*>& siblings = parent->getChildren();
+        for (int i = 0; i < siblings.size(); ++i) {
+            if (siblings[i] != n && siblings[i]->getName() == trimmed) {
+                cout << "Duplicate category name under the same parent.\n";
+                return;
+            }
+        }
+    }
+
+    // Commit the rename once validation passes
+    n->setName(trimmed);
+    cout << "Category renamed to: " << trimmed << "\n";
+}
+
+// Remove a category (and descendants) identified by its normalized path
+void LCMS::removeCategory(string category) {
+    // Normalize the requested path prior to lookup
+    string norm = _lcms_normalizePath(category);
+    if (norm.size() == 0) {
+        cout << "Invalid category path.\n";
+        return;
+    }
+
+    // Locate the node so we know whether the category exists
+    Node* target = libTree->getNode(norm);
+    if (!target) {
+        cout << "Category not found.\n";
+        return;
+    }
+
+    // Prevent accidental removal of the root since it anchors the catalog
+    if (target == libTree->getRoot()) {
+        cout << "Cannot remove the root category.\n";
+        return;
+    }
+
+    // Acquire the parent so we can issue the removal request
+    Node* parent = target->getParent();
+    if (!parent) {
+        cout << "Category removal failed.\n";
+        return;
+    }
+
+    // List every book that will be removed to mirror professor's sample
+    MyVector<Book*> doomedBooks;
+    target->collectBooksInSubtree(doomedBooks);
+    for (int i = 0; i < doomedBooks.size(); ++i) {
+        // Print the removal notice for each book before the nodes are deleted
+        cout << "Book \"" << doomedBooks[i]->getTitle() << "\" has been deleted from the library" << endl;
+    }
+
+    // Gather categories in post-order so children appear before the target in output
+    MyVector<Node*> doomedCategories;
+    _lcms_collectCategoriesPostOrder(target, doomedCategories);
+    for (int i = 0; i < doomedCategories.size(); ++i) {
+        if (doomedCategories[i] == target) continue;
+        // Announce each sub-category removal in the required format
+        cout << "Category \"" << doomedCategories[i]->getName() << "\" has been deleted from the Library." << endl;
+    }
+
+    // Delegate actual deletion to the tree-level helper
+    if (libTree->removeChild(parent, target->getName())) {
+        // Final confirmation for the primary category
+        cout << "Category \"" << target->getName() << "\" has been deleted from the Library." << endl;
+    } else {
+        // Inform the user if removal failed unexpectedly
+        cout << "Category removal failed.\n";
+    }
 }
 
 //========================================================================

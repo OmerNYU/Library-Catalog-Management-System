@@ -111,7 +111,8 @@ MyVector<T>::MyVector(const MyVector<T>& other) {
 	for (int i = 0; i < v_size; i++) {
 		new_array[i] = other.array[i];
 	}
-	// (Note: array pointer ownership/assignment is handled by your design)
+	// Transfer ownership of the freshly allocated buffer into this object
+	array = new_array;
 }
 
 //----------------------------------------------------------
