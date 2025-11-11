@@ -455,16 +455,20 @@ void Tree::print() const {
     }
 }
 
-// Recursively render a subtree using ASCII branches similar to the professor's sample
+// Recursively render a subtree using box-drawing glyphs, as per professor feedback
 void Tree::printNode(const Node* node, const string& prefix, bool isLast) const {
+    // NOTE: Following professor guidance, we employ UTF-8 box-drawing characters.
+    // This keeps the visual layout aligned with classroom expectations.
+    const string connector = isLast ? "└── " : "├── ";
+    const string spacer    = isLast ? "    " : "│   ";
     // Print the accumulated prefix (vertical bars and spaces)
     cout << prefix;
-    // Choose connector: "`-- " for the final child, "|-- " otherwise
-    cout << (isLast ? "\\-- " : "|-- ");
+    // Choose connector: "└──" for the final child, "├──" otherwise
+    cout << connector;
     // Display the node name followed by the total book count held in the subtree
     cout << node->getName() << "(" << node->getBookCount() << ")\n";
     // Build the prefix for children: add spaces when last, vertical bar otherwise
-    string nextPrefix = prefix + (isLast ? "    " : "|   ");
+    string nextPrefix = prefix + spacer;
     // Access children via const overload to avoid accidental mutation
     const MyVector<Node*>& kids = node->getChildren();
     // Iterate through children and render them with updated prefix context
