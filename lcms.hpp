@@ -38,6 +38,9 @@ class LCMS
 	    // Keyword search across categories and books
 	    void find(string keyword);
 
+        // List books whose author field contains the given text
+        void findByAuthor(string author) const;
+
 	    // List all books under a category (empty path => whole tree)
 	    void findAll(string category);
 
@@ -479,6 +482,56 @@ void LCMS::find(string keyword) {
         _lcms_printBookCollection(bookMatches);
     }
     cout << "============================================================" << endl;
+}
+
+// ---------------------------------------------------------------------
+// findByAuthor: traverse the tree and list books matching author text
+// ---------------------------------------------------------------------
+void LCMS::findByAuthor(string author) const {
+    string trimmed = _lcms_trim(author);
+    if (trimmed.size() == 0) {
+        cout << "Author query cannot be empty." << endl;
+        return;
+    }
+
+    if (!libTree || !libTree->getRoot()) {
+        cout << "No books found." << endl;
+        return;
+    }
+
+    MyVector<Book*> matches;
+    MyVector<const Node*> stack;
+    stack.push_back(libTree->getRoot());
+
+    while (!stack.empty()) {
+        int last = stack.size() - 1;
+        const Node* cur = stack[last];
+        stack.removeAt(last);
+
+        const MyVector<Book*>& books = cur->getBooks();
+        for (int i = 0; i < books.size(); ++i) {
+            Book* candidate = books[i];
+            if (candidate && candidate->getAuthor().find(trimmed) != string::npos) {
+                matches.push_back(candidate);
+            }
+        }
+
+        const MyVector<Node*>& children = cur->getChildren();
+        for (int i = 0; i < children.size(); ++i) {
+            stack.push_back(children[i]);
+        }
+    }
+
+    if (matches.size() == 0) {
+        cout << "No books found by author containing <" << trimmed << ">." << endl;
+        return;
+    }
+
+    cout << "Books found by author containing <" << trimmed << ">:" << endl;
+    cout << "============================================================" << endl;
+    _lcms_printBookCollection(matches);
+    cout << "============================================================" << endl;
+    _lcms_printCountLine(matches.size(), "Book", "Books");
 }
 
 // ---------------------------------------------------------------------

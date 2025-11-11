@@ -9,6 +9,7 @@ void listCommands()
 		<<" import <file_name>                          : Read a Book file from a file"<<endl
 		<<" export <file_name>                          : Export Books to a file"<<endl
 		<<" find <keyword>                              : List all books and categories containing the <keyword>"<<endl
+		<<" findAuthor <author name>                    : List all books whose author matches text"<<endl
 		<<" findBook <title of the book>                : Search a book in the catalog"<<endl
 		<<" findAll <category/sub-category/..>          : List all books in a category/sub-category"<<endl
 		<<" addBook <book-title>                        : Add a book to the catalog"<<endl
@@ -58,6 +59,8 @@ int main()
 				lcms.list();
 			else if(command=="find") 						     			
 				lcms.find(parameter1);
+			else if(command=="findAuthor" or command=="findauthor" or command == "fauth")
+				lcms.findByAuthor(parameter1);
 			else if(command=="findBook" or command=="findbook" or command == "fb")				
 				lcms.findBook(parameter1);
 			else if(command=="findAll" or command=="findall" or command == "fa")     			
