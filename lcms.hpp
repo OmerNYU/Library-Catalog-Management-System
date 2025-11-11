@@ -537,13 +537,13 @@ void LCMS::findByAuthor(string author) const {
     }
 
     MyVector<Book*> matches;
-    MyVector<const Node*> stack;
+    MyVector<Node*> stack;
     stack.push_back(libTree->getRoot());
 
     // DFS over every node; check each local book’s author field.
     while (!stack.empty()) {
         int last = stack.size() - 1;
-        const Node* cur = stack[last];
+        Node* cur = stack[last];
         stack.removeAt(last);
 
         const MyVector<Book*>& books = cur->getBooks();
@@ -554,7 +554,7 @@ void LCMS::findByAuthor(string author) const {
             }
         }
 
-        const MyVector<const Node*>& children = cur->getChildren();
+        const MyVector<Node*>& children = cur->getChildren();
         for (int i = 0; i < children.size(); ++i) {
             stack.push_back(children[i]);
         }
