@@ -3,6 +3,8 @@
 
 // -----------------------------------------------------------------------------
 // Library Catalog Project — General Tree for categories + per-category book lists.
+// I use inline functions so that the function definitions inside the header file don’t cause linker errors when the header is included in multiple source files
+// Source: https://stackoverflow.com/questions/5057021/why-do-inline-functions-have-to-be-defined-in-a-header-file
 // -----------------------------------------------------------------------------
 
 #include <string>     // for std::string names and paths
@@ -150,14 +152,14 @@ class Tree
 // Node methods
 // ============================================================================
 
-// Constructor wires up the label, parent pointer, and resets the running count.
+// Constructor sets up the name, parent pointer, and resets the running count.
 inline Node::Node(const string& name, Node* parent) {
 	this->name = name;
 	this->parent = parent;
 	bookCount = 0;
 }
 
-// Simple metadata getters (const so they can be used on const Nodes)
+// Simple metadata getters (const so they can be used on const nodes)
 inline string Node::getName() const { return name; }
 inline Node* Node::getParent() const { return parent; }
 inline unsigned int Node::getBookCount() const { return bookCount; }
@@ -165,19 +167,19 @@ inline unsigned int Node::getBookCount() const { return bookCount; }
 // Mutable children access (Tree/print helpers use this)
 inline MyVector<Node*>& Node::getChildren() { return children; }
 
-// Const children access (lets print/search use a const Node)
+// Const children access (lets print/search use a const node)
 inline const MyVector<Node*>& Node::getChildren() const { return children; }
 
-// Mutable books access (used internally for inserts/removals)
+// Mutable books access (used internally for adding/removing books)
 inline MyVector<Book*>& Node::getBooks() { return books; }
 
-// Const books view (safe for read-only traversals)
+// Const books view (safe for read-only traversals like printing)
 inline const MyVector<Book*>& Node::getBooks() const { return books; }
 
-// Only called after LCMS validates the new name
+// Only called after LCMS validates the new name (to update the name)
 inline void Node::setName(const string& newName) { name = newName; }
 
-// Linear search across immediate children (small n, fine for this project)
+// Linear search across immediate children (small n so is suitable for this assignment)
 inline Node* Node::findChildByName(const string& childName) const {
 	for (int i = 0; i < children.size(); i++){
 		if (children[i]->getName() == childName) return children[i];
@@ -185,7 +187,7 @@ inline Node* Node::findChildByName(const string& childName) const {
 	return nullptr;	
 }
 
-// Create-or-return child; keeps the tree tidy without duplicates
+// Create-or-return child; keeps the tree tidy without duplicates (if the child already exists, return it)
 inline Node* Node::addChild(const string& childName) {
 	Node* exists = findChildByName(childName);
 	if (exists != nullptr) return exists;
@@ -197,7 +199,7 @@ inline Node* Node::addChild(const string& childName) {
 
 // Remove a direct child and decrement bookCount along the parent chain
 inline bool Node::removeChildByName(const string& childName) {
-	// Find which slot to remove
+	// Find which slot to remove (if the child doesn't exist, return false)
 	int idx = -1;
 	for (int i = 0; i < children.size(); ++i) {
 		if (children[i]->getName() == childName) {
@@ -207,16 +209,16 @@ inline bool Node::removeChildByName(const string& childName) {
 	}
 	if (idx == -1) return false;
 
-	// Remember how many books lived in that subtree
+	// Remember how many books lived in that subtree (to decrement the bookCount)
 	unsigned int delta = children[idx]->getBookCount();
 
-	// Drop the entire subtree (child dtor frees its own children & books)
+	// Drop the entire subtree (child destructor frees its own children & books)
 	delete children[idx];
 
-	// Close the hole in the children vector
+	// Close the hole in the children vector (to maintain the order)
 	children.removeAt(idx);
 
-	// Bubble the aggregate count change up to the root
+	// Bubble the aggregate count change up to the root (to decrement the bookCount)
 	Node* p = this;
 	while (p != nullptr) {
 		p->bookCount -= delta;
@@ -243,17 +245,18 @@ inline bool Node::addBook(Book* book) {
 
 // Remove the first title match from this category only (and update counts)
 inline bool Node::removeBookByTitle(const string& title) {
+	// Find which slot to remove (if the book doesn't exist, return false)
 	int idx = -1;
 	for (int i = 0; i < books.size(); ++i) {
 		if (books[i]->getTitle() == title) { idx = i; break; }
 	}
 	if (idx == -1) return false;
 
-	// We own the Book*, so delete it here
+	// We own the Book*, so delete it here (to free the memory)
 	delete books[idx];
 	books.removeAt(idx);
 
-	// Decrement counts up the chain
+	// Decrement counts up the chain (to decrement the bookCount)
 	Node* p = this;
 	while (p != nullptr) {
 		p->bookCount -= 1;
@@ -262,7 +265,7 @@ inline bool Node::removeBookByTitle(const string& title) {
 	return true;
 }
 
-// Local-only lookup by title (does not recurse into children)
+// Local-only lookup by title (does not recurse into children) (if the book doesn't exist, return nullptr)
 inline Book* Node::findBookHereByTitle(const string& title) const {
 	for (int i = 0; i < books.size(); ++i) {
 		if (books[i]->getTitle() == title) return books[i];
@@ -270,13 +273,13 @@ inline Book* Node::findBookHereByTitle(const string& title) const {
 	return nullptr;
 }
 
-// Pretty-print this subtree with indentation (simple ASCII version)
+// Pretty-print this subtree with indentation (simple ASCII version) (to print the tree)
 inline void Node::print(int depth) const {
-	// 2 spaces per depth level
+	// 2 spaces per depth level (to indent the tree)
 	for (int i = 0; i < depth; ++i) cout << "  ";
 	cout << "- " << name << " (books=" << bookCount << ")\n";
 
-	// Show titles directly under this category
+	// Show titles directly under this category (to print the books)
 	for (int i = 0; i < books.size(); ++i) {
 		for (int j = 0; j < depth + 1; ++j) cout << "  ";
 		cout << "* " << books[i]->getTitle() << "\n";
@@ -321,10 +324,13 @@ inline Tree::~Tree() {
 // Expose the root to LCMS (read-only pointer)
 inline Node* Tree::getRoot() const { return root; }
 
-// Split a path like "A/B/C" into {"A","B","C"}, skipping empty segments
-inline void Tree::splitPath(const string& path, MyVector<string>& parts) const {
+// Split a path like "A/B/C" into {"A","B","C"}, skipping empty segments (to split the path into parts)
+inline void Tree::splitPath(const string& path, MyVector<string>& parts) const { 
+	// Clear the parts vector to start fresh
 	parts.clear();
+	// Iterate through the path and split it into parts
 	int n = (int)path.size();
+	// Initialize the current part to an empty string
 	string current = "";
 	for (int i = 0; i < n; ++i) {
 		char c = path[i];
@@ -389,7 +395,7 @@ inline bool Tree::removeNode(const string& path) {
 		parentPath += parts[i];
 	}
 
-	// Parent is either root (when removing an immediate child) or a deeper node
+	// Parent is either root (when removing an immediate child) or a deeper node (to get the parent node)
 	Node* parentNode = (parentPath.size() == 0) ? root : getNode(parentPath);
 	if (!parentNode) return false;
 
@@ -403,7 +409,7 @@ inline void Tree::print() const {
 	// Print root summary first
 	cout << root->getName() << "(" << root->getBookCount() << ")\n";
 
-	// Then pretty-print each child with connectors
+	// Then pretty-print each child with connectors (to print the tree)
 	const MyVector<Node*>& kids = root->getChildren();
 	for (int i = 0; i < kids.size(); ++i) {
 		bool isLast = (i == kids.size() - 1);
@@ -411,7 +417,7 @@ inline void Tree::print() const {
 	}
 }
 
-// Helper for print(): draw branch connectors and recurse
+// Helper for print(): draw branch connectors and recurse (to print the tree)
 inline void Tree::printNode(const Node* node, const string& prefix, bool isLast) const {
 	// Use UTF-8 box drawing for nicer CLI output (as suggested in class)
 	const string connector = isLast ? "└── " : "├── ";
@@ -430,7 +436,7 @@ inline void Tree::printNode(const Node* node, const string& prefix, bool isLast)
 	}
 }
 
-// DFS for first book whose title matches
+// DFS for first book whose title matches (to find the book)
 inline Book* Tree::findBook(const string& title) const {
 	if (!root) return nullptr;
 
@@ -451,7 +457,7 @@ inline Book* Tree::findBook(const string& title) const {
 	return nullptr;
 }
 
-// Ensure category exists and add the book there
+// Ensure category exists and add the book there (to add the book to the category)
 inline bool Tree::addBookAt(const string& categoryPath, Book* book) {
 	if (!root || !book) return false;
 	Node* node = createNode(categoryPath);
@@ -459,7 +465,7 @@ inline bool Tree::addBookAt(const string& categoryPath, Book* book) {
 	return node->addBook(book);
 }
 
-// DFS remove first matching title anywhere
+// DFS remove first matching title anywhere (to remove the book from the category)
 inline bool Tree::removeBookByTitle(const string& title) {
 	if (!root) return false;
 

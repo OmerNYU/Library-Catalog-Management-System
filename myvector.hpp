@@ -73,10 +73,10 @@ class MyVector
 		// Element access
 		// operator[] is unchecked (fast); at() is checked (throws).
 		// -----------------------------------------------------------------
-		T&       operator[](int index);
+		T& operator[](int index);
 		const T& operator[](int index) const;
 
-		T&       at(int index);
+		T& at(int index);
 		const T& at(int index) const;
 
 		// -----------------------------------------------------------------

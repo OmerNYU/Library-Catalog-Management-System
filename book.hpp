@@ -10,7 +10,7 @@
 #include <string>
 #include <iostream>
 
-// Pull only what I actually use into scope (keeping it tidy).
+// Pull only what I actually use into scope
 using std::string;
 using std::cout;
 using std::endl;
@@ -18,6 +18,8 @@ using std::endl;
 // -----------------------------------------------------------------------------
 // Book: holds the minimal info I need across the whole program.
 // Title/Author/ISBN are strings; Year is an int (can handle negative years in data).
+// I use inline functions so that the function definitions inside the header file don’t cause linker errors when the header is included in multiple source files
+// Source: https://stackoverflow.com/questions/5057021/why-do-inline-functions-have-to-be-defined-in-a-header-file
 // -----------------------------------------------------------------------------
 class Book 
 {
@@ -45,9 +47,9 @@ class Book
 		string getTitle() const;
 		string getAuthor() const;
 		string getISBN() const;
-		int    getYear()  const;
+		int getYear()  const;
 
-		// Setters: used by the edit flow in LCMS (update fields safely).
+		// Setters: used by the edit menu in LCMS (to update fields safely).
 		void setTitle(string t);
 		void setAuthor(string a);
 		void setISBN(string i);

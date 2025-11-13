@@ -6,6 +6,9 @@
 // This header ties the user-facing commands (import, list, find, etc.) to the
 // underlying Tree/Book types. The idea is to keep LCMS as a thin "facade":
 // parse user input here, call Tree/Book helpers there, and format outputs.
+// Some of the logic implemented in this header is inspired by a previous project I did where I coded a simple shell program in C 
+// So, some of the CLI logic is similar to the one in the previous project which can be found at this link:
+// https://github.com/OmerNYU/Shell_C which is a simple shell program that I coded in C.
 // -----------------------------------------------------------------------------
 
 #include <iostream>   // For CLI-style I/O (cout/cin)
@@ -16,7 +19,8 @@
 
 // -----------------------------------------------------------------------------
 // LCMS = thin facade over the Tree with CLI-ish routines for the assignment.
-// I’m keeping class comments simple so it reads like a lab project, not a spec.
+// I use inline functions so that the function definitions inside the header file don’t cause linker errors when the header is included in multiple source files
+// Source: https://stackoverflow.com/questions/5057021/why-do-inline-functions-have-to-be-defined-in-a-header-file
 // -----------------------------------------------------------------------------
 class LCMS 
 {
@@ -25,7 +29,7 @@ class LCMS
 	    Tree* libTree;
 
 	public:
-	    // ctor: Build LCMS around a named root (e.g., "Library"). Nothing fancy here.
+	    // ctor: Build LCMS around a named root (e.g., "Library").
 	    LCMS(string name);
 
 	    // dtor: Tear down the entire tree. Nodes delete their children and books.
@@ -75,7 +79,7 @@ class LCMS
 	    // removeCategory: Deletes a category subtree; announces what is removed.
 	    void removeCategory(string category);
 
-	    // NOTE: If I add private helpers, I won’t change the public method signatures,
+	    // NOTE: I added private helpers but I won’t change the public method signatures,
 	    // because the assignment says not to.
 };
 //==========================================================
@@ -90,7 +94,6 @@ class LCMS
 
 // ------------------------------------------------------------------
 // _lcms_trim: Strip leading/trailing spaces/tabs without <algorithm>.
-// I’m avoiding fancy dependencies so the grader can compile easily.
 // ------------------------------------------------------------------
 static string _lcms_trim(const string& s) {
     int start = 0;
@@ -158,7 +161,7 @@ static bool _lcms_parseYear(const string& s, int& outYear) {
 }
 
 // ---------------------------------------------------------------------------------
-// _lcms_parseCSVLine: Manual CSV split that understands quotes and "" escapes.
+// _lcms_parseCSVLine: Manual CSV split that understands quotes and "" escapes (to parse the CSV line into fields)
 // Expected 5 fields total: Title, Author, ISBN, Publication Year, Category.
 // I use this to avoid pulling in a CSV library for a small assignment.
 // ---------------------------------------------------------------------------------
@@ -196,7 +199,7 @@ static bool _lcms_parseCSVLine(const string& line, MyVector<string>& fieldsOut) 
 
 // -----------------------------------------------------------------------------
 // _lcms_nodePath: Build a "A/B/C" style path from a Node* (excluding the root).
-// This is just for friendlier printing in search/list outputs.
+// This is just for friendlier printing in search/list outputs (to build the path)
 // -----------------------------------------------------------------------------
 static string _lcms_nodePath(const Node* n) {
     MyVector<const Node*> chain;
@@ -270,7 +273,7 @@ static void _lcms_printCountLine(int count, const string& singular, const string
 }
 
 // -----------------------------------------------------------------------------
-// _lcms_printBookDetails: Prints one book in a bordered block (screenshot style).
+// _lcms_printBookDetails: Prints one book in a bordered block (screenshot style) (to print the book details)
 // -----------------------------------------------------------------------------
 static void _lcms_printBookDetails(const Book* book) {
     if (!book) return;
@@ -283,7 +286,7 @@ static void _lcms_printBookDetails(const Book* book) {
 }
 
 // -----------------------------------------------------------------------------
-// _lcms_printBookCollection: Just loop _lcms_printBookDetails with spacing.
+// _lcms_printBookCollection: Just loop _lcms_printBookDetails with spacing (to print the book collection)
 // -----------------------------------------------------------------------------
 static void _lcms_printBookCollection(const MyVector<Book*>& books) {
     for (int i = 0; i < books.size(); ++i) {
@@ -293,7 +296,7 @@ static void _lcms_printBookCollection(const MyVector<Book*>& books) {
 }
 
 // -----------------------------------------------------------------------------
-// _lcms_lastSegment: Grab the last component of a path for friendlier messages.
+// _lcms_lastSegment: Grab the last component of a path for friendlier messages (to get the last segment of the path)
 // -----------------------------------------------------------------------------
 static string _lcms_lastSegment(const string& path) {
     string result = "", segment = "";
